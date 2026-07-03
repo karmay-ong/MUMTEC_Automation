@@ -40,8 +40,8 @@ TASK_PROGRESS_COMPLETED_VALUE = "Completed"
 
 # Any Task Progress value containing these keywords (case-insensitive)
 # is treated as a terminal Rejected/Cancelled state, overriding the
-# normal status progression. The Balance formula below excludes rows
-# whose Submission Status exactly matches one of these output labels.
+# normal status progression. Handy if you want to exclude these from
+# any Balance/expense calculations you set up yourself in the sheet.
 TASK_PROGRESS_TERMINAL_STATUSES = {
     "rejected": "Rejected",
     "cancelled": "Cancelled",
@@ -84,7 +84,6 @@ CLUB_COLUMNS = [
 CLUB_ALIASES = {
     "musa": "MUSA SOIT",
     "soit": "MUSA SOIT",
-    "gdg" : "GDGoc"
 }
 
 # Set to True to always keep the sheet sorted by "Date Added" (oldest
@@ -96,19 +95,7 @@ AUTO_SORT_BY_DATE = True
 # row, set this to the row number where "Date Added, Expense Type, ..."
 # actually lives. E.g. if you have 4 custom rows above it, the real
 # header is row 5, so set HEADER_ROW = 5. Default (no preamble) is 1.
-HEADER_ROW = 6
-
-# Set to True to have the script automatically (re)write a live SUMIFS
-# formula into each club's "Balance" cell every run: Total budget minus
-# every non-Rejected/Cancelled request in that club's amount column.
-# "Total budget" itself is never touched -- you type/update that by hand.
-AUTO_MANAGE_BALANCE_ROW = True
-
-# Row numbers for your budget tracking rows (based on your sheet layout:
-# row 3 = Total budget, row 4 = Balance, row 5 = first data row).
-# Defaults derived from HEADER_ROW -- override if your layout differs.
-BUDGET_ROW = HEADER_ROW - 1
-BALANCE_ROW = HEADER_ROW
+HEADER_ROW = 4
 
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from

@@ -49,19 +49,22 @@ def asana_headers():
     return {"Authorization": f"Bearer {config.ASANA_ACCESS_TOKEN}"}
 
 
+TASK_OPT_FIELDS = [
+    "name",
+    "notes",
+    "created_at",
+    "permalink_url",
+    "custom_fields.name",
+    "custom_fields.display_value",
+    "memberships.project",
+]
+
+
 def fetch_asana_tasks(project_gid):
     """Fetch all tasks in a project, including custom fields and notes."""
-    opt_fields = [
-        "name",
-        "notes",
-        "created_at",
-        "permalink_url",
-        "custom_fields.name",
-        "custom_fields.display_value",
-    ]
     tasks = []
     url = f"{ASANA_API_BASE}/projects/{project_gid}/tasks"
-    params = {"opt_fields": ",".join(opt_fields), "limit": 100}
+    params = {"opt_fields": ",".join(TASK_OPT_FIELDS), "limit": 100}
 
     while url:
         resp = requests.get(url, headers=asana_headers(), params=params)
@@ -77,6 +80,24 @@ def fetch_asana_tasks(project_gid):
             url = None
 
     return tasks
+
+
+def fetch_single_task(task_gid):
+    """Fetch one task by GID, with the same fields fetch_asana_tasks uses."""
+    url = f"{ASANA_API_BASE}/tasks/{task_gid}"
+    resp = requests.get(url, headers=asana_headers(), params={"opt_fields": ",".join(TASK_OPT_FIELDS)})
+    resp.raise_for_status()
+    return resp.json().get("data")
+
+
+def task_in_target_project(task):
+    """True if the task belongs to config.ASANA_PROJECT_GID (webhooks can
+    fire for tasks in other projects too, if the workspace has multiple)."""
+    for membership in task.get("memberships", []) or []:
+        project = membership.get("project") or {}
+        if project.get("gid") == config.ASANA_PROJECT_GID:
+            return True
+    return False
 
 
 def fetch_attachment_count(task_gid):
@@ -202,7 +223,8 @@ def determine_status(expense_type, pr_number, po_number, znp_number, task_progre
     normalized_progress = (task_progress or "").strip().lower()
 
     # Rejected/Cancelled overrides everything else, regardless of expense
-    # type -- the Balance formula excludes rows with these exact labels.
+    # type -- kept as a distinct status in case you use it in your own
+    # sheet formulas (e.g. excluding these from your own Balance calc).
     for keyword, label in config.TASK_PROGRESS_TERMINAL_STATUSES.items():
         if keyword in normalized_progress:
             return label
@@ -483,6 +505,15 @@ def sort_sheet_by_date_added(service):
     # Pad every row to the same width so columns don't shift when written back.
     normalized = [row + [""] * (num_cols - len(row)) for row in data_rows]
 
+    # Re-write Date Added as clean "YYYY-MM-DD" text. Without this, a cell
+    # that Sheets returned as a raw date serial (e.g. 46065) gets written
+    # back as that same raw number -- and if the destination row didn't
+    # already have Date formatting, it displays as "46065" instead of a
+    # date. Writing plain text lets Sheets re-detect and format it fresh.
+    for row in normalized:
+        parsed = _parse_sheet_date(row[date_idx])
+        row[date_idx] = parsed.strftime("%Y-%m-%d") if parsed else row[date_idx]
+
     service.spreadsheets().values().update(
         spreadsheetId=config.SPREADSHEET_ID,
         range=f"{config.SHEET_NAME}!A{data_start}",
@@ -491,57 +522,29 @@ def sort_sheet_by_date_added(service):
     ).execute()
 
 
-def ensure_balance_formulas(service):
-    """
-    Writes (or refreshes) a live formula into each club's Balance cell:
-        Balance = Total budget - SUM of that club's requests,
-                  excluding rows whose Submission Status is Rejected/Cancelled.
-
-    Safe to run every time -- it's the same formula each run, and it
-    never touches the "Total budget" row (you manage that by hand).
-    """
-    if not config.AUTO_MANAGE_BALANCE_ROW:
-        return
-
-    status_col = header_col_letter("Submission Status")
-    data_start = config.HEADER_ROW + 1
-
-    updates = []
-    for club in config.CLUB_COLUMNS:
-        col = header_col_letter(f"Amounts for {club}")
-        formula = (
-            f"={col}{config.BUDGET_ROW}-SUMIFS("
-            f"{col}{data_start}:{col}, "
-            f"{status_col}{data_start}:{status_col}, \"<>Rejected\", "
-            f"{status_col}{data_start}:{status_col}, \"<>Cancelled\")"
-        )
-        updates.append({"range": f"{config.SHEET_NAME}!{col}{config.BALANCE_ROW}", "values": [[formula]]})
-
-    service.spreadsheets().values().batchUpdate(
-        spreadsheetId=config.SPREADSHEET_ID,
-        body={"valueInputOption": "USER_ENTERED", "data": updates},
-    ).execute()
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
-def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Starting sync...")
+def sync_tasks(tasks, service=None, run_sort=True):
+    """
+    Core upsert logic, shared by the scheduled full-project sync (main())
+    and the webhook server (which calls this with just the 1-2 tasks that
+    changed). Appends new tasks, updates existing rows that changed, then
+    optionally re-sorts the sheet by Date Added.
 
-    print("Fetching tasks from Asana...")
-    tasks = fetch_asana_tasks(config.ASANA_PROJECT_GID)
-    print(f"  Found {len(tasks)} task(s) in the project.")
+    Returns a dict summary: {"appended": int, "updated": int, "unchanged": int}
+    """
+    if service is None:
+        service = get_sheets_service()
 
-    print("Connecting to Google Sheets...")
-    service = get_sheets_service()
     ensure_header_row(service)
     existing = get_existing_rows(service)
-    print(f"  {len(existing)} task(s) already logged in the sheet.")
 
     do_invoice_idx = config.SHEET_HEADERS.index("DO & Invoice received?")
+    date_idx = config.SHEET_HEADERS.index("Date Added")
+    num_cols = len(config.SHEET_HEADERS) + 1
 
     new_rows = []
     updates = []
@@ -570,8 +573,6 @@ def main():
         if prior is None:
             new_rows.append(row)
         else:
-            num_cols = len(config.SHEET_HEADERS) + 1
-            date_idx = config.SHEET_HEADERS.index("Date Added")
             padded_prior = prior["values"] + [""] * (num_cols - len(prior["values"]))
             comparable_new = row[:date_idx] + row[date_idx + 1 :]
             comparable_old = padded_prior[:date_idx] + padded_prior[date_idx + 1 :]
@@ -582,26 +583,28 @@ def main():
 
     if new_rows:
         append_rows(service, new_rows)
-        print(f"Appended {len(new_rows)} new row(s).")
-    else:
-        print("No new tasks to add.")
-
     if updates:
         update_rows(service, updates)
-        print(f"Updated {len(updates)} existing row(s) whose status/details changed.")
-    else:
-        print("No existing rows needed updating.")
 
-    print(f"{unchanged} row(s) unchanged.")
-
-    if config.AUTO_SORT_BY_DATE:
-        print("Sorting sheet by Date Added...")
+    if run_sort and (new_rows or updates) and config.AUTO_SORT_BY_DATE:
         sort_sheet_by_date_added(service)
 
-    if config.AUTO_MANAGE_BALANCE_ROW:
-        print("Refreshing Balance row formulas...")
-        ensure_balance_formulas(service)
+    return {"appended": len(new_rows), "updated": len(updates), "unchanged": unchanged}
 
+
+def main():
+    print(f"[{datetime.now(timezone.utc).isoformat()}] Starting sync...")
+
+    print("Fetching tasks from Asana...")
+    tasks = fetch_asana_tasks(config.ASANA_PROJECT_GID)
+    print(f"  Found {len(tasks)} task(s) in the project.")
+
+    print("Connecting to Google Sheets...")
+    result = sync_tasks(tasks)
+
+    print(f"Appended {result['appended']} new row(s).")
+    print(f"Updated {result['updated']} existing row(s) whose status/details changed.")
+    print(f"{result['unchanged']} row(s) unchanged.")
     print("Done.")
 
 
