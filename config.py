@@ -69,7 +69,7 @@ DEFAULT_EXPENSE_TYPE_BUCKET = "Others"
 CLUB_COLUMNS = [
     "MUMTEC",
     "MUSA SOIT",
-    "GDGoC",
+    "GDG",
     "MBC",
     "MAC",
     "MCC",

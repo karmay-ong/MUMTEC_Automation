@@ -7,6 +7,10 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch: {}  # lets you manually trigger a run from the Actions tab too
 
+concurrency:
+  group: asana-sheets-sync
+  cancel-in-progress: false  # let a running sync finish; just don't start a second one on top of it
+
 jobs:
   sync:
     runs-on: ubuntu-latest

@@ -221,12 +221,16 @@ def determine_submission_no(expense_type, pr_number, po_number, znp_number):
 
 def determine_status(expense_type, pr_number, po_number, znp_number, task_progress):
     normalized_progress = (task_progress or "").strip().lower()
+    normalized_numbers = " ".join(filter(None, (pr_number, po_number, znp_number))).lower()
 
     # Rejected/Cancelled overrides everything else, regardless of expense
     # type -- kept as a distinct status in case you use it in your own
     # sheet formulas (e.g. excluding these from your own Balance calc).
+    # Checked against BOTH the Task Progress field AND the PR/PO/ZNP
+    # number fields, since cancellation is sometimes marked by appending
+    # "(cancelled)" directly to a number instead of changing the status.
     for keyword, label in config.TASK_PROGRESS_TERMINAL_STATUSES.items():
-        if keyword in normalized_progress:
+        if keyword in normalized_progress or keyword in normalized_numbers:
             return label
 
     completed = normalized_progress == config.TASK_PROGRESS_COMPLETED_VALUE.lower()
