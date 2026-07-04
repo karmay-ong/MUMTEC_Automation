@@ -373,14 +373,24 @@ def header_col_letter(header_name):
 
 
 def ensure_header_row(service):
+    """
+    Only writes a generic header row if the ENTIRE header row is
+    currently blank. Checks the whole row (not just column A), since a
+    custom header layout might only have text in a middle column (e.g.
+    "Details of Purchase" living in column G with A-F left blank).
+    """
     header_row = config.HEADER_ROW
+    last_col = gid_column_letter()
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=config.SPREADSHEET_ID, range=f"{config.SHEET_NAME}!A{header_row}:A{header_row}")
+        .get(spreadsheetId=config.SPREADSHEET_ID, range=f"{config.SHEET_NAME}!A{header_row}:{last_col}{header_row}")
         .execute()
     )
-    if not result.get("values"):
+    row_values = result.get("values", [])
+    row_is_blank = not row_values or not any(cell.strip() for cell in row_values[0] if cell)
+
+    if row_is_blank:
         headers = list(config.SHEET_HEADERS) + ["Task GID"]
         service.spreadsheets().values().update(
             spreadsheetId=config.SPREADSHEET_ID,
