@@ -69,7 +69,7 @@ DEFAULT_EXPENSE_TYPE_BUCKET = "Others"
 CLUB_COLUMNS = [
     "MUMTEC",
     "MUSA SOIT",
-    "GDG",
+    "GDGoC",
     "MBC",
     "MAC",
     "MCC",
@@ -95,7 +95,7 @@ AUTO_SORT_BY_DATE = True
 # row, set this to the row number where "Date Added, Expense Type, ..."
 # actually lives. E.g. if you have 4 custom rows above it, the real
 # header is row 5, so set HEADER_ROW = 5. Default (no preamble) is 1.
-HEADER_ROW = 5
+HEADER_ROW = 4
 
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from

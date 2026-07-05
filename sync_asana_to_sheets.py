@@ -426,14 +426,15 @@ def get_existing_rows(service):
     return existing
 
 
-def update_rows(service, updates):
-    """updates: list of (row_number, row_values)."""
-    if not updates:
+def update_cells(service, cell_updates):
+    """cell_updates: list of (row_number, col_index_0based, value). Writes
+    only the specific cells that changed -- everything else in those rows
+    (including any manual edits you've made) is left untouched."""
+    if not cell_updates:
         return
-    last_col = gid_column_letter()
     data = [
-        {"range": f"{config.SHEET_NAME}!A{row_number}:{last_col}{row_number}", "values": [row_values]}
-        for row_number, row_values in updates
+        {"range": f"{config.SHEET_NAME}!{col_letter(col_index + 1)}{row_number}", "values": [[value]]}
+        for row_number, col_index, value in cell_updates
     ]
     service.spreadsheets().values().batchUpdate(
         spreadsheetId=config.SPREADSHEET_ID,
@@ -559,6 +560,9 @@ def sync_tasks(tasks, service=None, run_sort=True):
     do_invoice_idx = config.SHEET_HEADERS.index("DO & Invoice received?")
     date_idx = config.SHEET_HEADERS.index("Date Added")
     num_cols = len(config.SHEET_HEADERS) + 1
+    # Every column is live-synced except Date Added (set once at creation
+    # and never changes) and the hidden Task GID column (never changes).
+    comparable_indices = [i for i in range(len(config.SHEET_HEADERS)) if i != date_idx]
 
     new_rows = []
     updates = []
@@ -588,22 +592,26 @@ def sync_tasks(tasks, service=None, run_sort=True):
             new_rows.append(row)
         else:
             padded_prior = prior["values"] + [""] * (num_cols - len(prior["values"]))
-            comparable_new = row[:date_idx] + row[date_idx + 1 :]
-            comparable_old = padded_prior[:date_idx] + padded_prior[date_idx + 1 :]
-            if comparable_new != comparable_old:
-                updates.append((prior["row_number"], row))
+            cell_updates = [
+                (prior["row_number"], j, row[j])
+                for j in comparable_indices
+                if row[j] != padded_prior[j]
+            ]
+            if cell_updates:
+                updates.extend(cell_updates)
             else:
                 unchanged += 1
 
     if new_rows:
         append_rows(service, new_rows)
     if updates:
-        update_rows(service, updates)
+        update_cells(service, updates)
 
     if run_sort and (new_rows or updates) and config.AUTO_SORT_BY_DATE:
         sort_sheet_by_date_added(service)
 
-    return {"appended": len(new_rows), "updated": len(updates), "unchanged": unchanged}
+    updated_rows = len({row_number for row_number, _, _ in updates})
+    return {"appended": len(new_rows), "updated": updated_rows, "unchanged": unchanged}
 
 
 def main():
