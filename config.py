@@ -104,7 +104,7 @@ EXCLUDED_SECTIONS = ["2026", "MIND ENGINE"]
 
 # Tasks whose Club/Team field matches any of these are also skipped
 # entirely. Matched case-insensitively.
-EXCLUDED_CLUBS = ["AI Challenge Club"]
+EXCLUDED_CLUBS = ["AI Challenge Cup"]
 
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from
