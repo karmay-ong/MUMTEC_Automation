@@ -95,7 +95,16 @@ AUTO_SORT_BY_DATE = True
 # row, set this to the row number where "Date Added, Expense Type, ..."
 # actually lives. E.g. if you have 4 custom rows above it, the real
 # header is row 5, so set HEADER_ROW = 5. Default (no preamble) is 1.
-HEADER_ROW = 4
+HEADER_ROW = 5
+
+# --- Exclusions ---------------------------------------------------------
+# Tasks in any of these Asana sections (within your project) are skipped
+# entirely -- never synced, never counted. Matched case-insensitively.
+EXCLUDED_SECTIONS = ["2026", "MIND ENGINE"]
+
+# Tasks whose Club/Team field matches any of these are also skipped
+# entirely. Matched case-insensitively.
+EXCLUDED_CLUBS = ["AI Challenge Club"]
 
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from

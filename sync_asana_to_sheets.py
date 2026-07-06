@@ -57,6 +57,7 @@ TASK_OPT_FIELDS = [
     "custom_fields.name",
     "custom_fields.display_value",
     "memberships.project",
+    "memberships.section.name",
 ]
 
 
@@ -98,6 +99,32 @@ def task_in_target_project(task):
         if project.get("gid") == config.ASANA_PROJECT_GID:
             return True
     return False
+
+
+def task_section_names(task):
+    """All section names this task sits under, within the target project."""
+    names = []
+    for membership in task.get("memberships", []) or []:
+        project = membership.get("project") or {}
+        section = membership.get("section") or {}
+        if project.get("gid") == config.ASANA_PROJECT_GID and section.get("name"):
+            names.append(section["name"])
+    return names
+
+
+def should_sync_task(task):
+    """False if this task should be skipped entirely -- excluded section
+    or excluded club -- per config.EXCLUDED_SECTIONS / EXCLUDED_CLUBS."""
+    section_names = {s.strip().lower() for s in task_section_names(task)}
+    if section_names & {s.strip().lower() for s in config.EXCLUDED_SECTIONS}:
+        return False
+
+    fields = custom_field_map(task)
+    club = (fields.get(config.FIELD_CLUB, "") or "").strip().lower()
+    if club in {c.strip().lower() for c in config.EXCLUDED_CLUBS}:
+        return False
+
+    return True
 
 
 def fetch_attachment_count(task_gid):
@@ -402,9 +429,13 @@ def ensure_header_row(service):
 
 def get_existing_rows(service):
     """
-    Returns {task_gid: {"row_number": int, "values": [...]}} for every
-    row currently in the sheet, so the caller can both detect duplicates
-    AND update a row in place when the underlying Asana task has changed.
+    Returns (existing, next_row):
+      existing  = {task_gid: {"row_number": int, "values": [...]}}
+      next_row  = the row number immediately after the last data row,
+                  computed deterministically from how many rows were
+                  actually read (NOT guessed by Sheets' table-detection,
+                  which gets confused by this sheet's header layout where
+                  column A is blank in rows 2-4 but column G isn't).
     """
     last_col = gid_column_letter()
     data_start = config.HEADER_ROW + 1
@@ -423,7 +454,8 @@ def get_existing_rows(service):
     for i, row in enumerate(values):
         if row and row[-1]:
             existing[row[-1]] = {"row_number": data_start + i, "values": row}
-    return existing
+    next_row = data_start + len(values)
+    return existing, next_row
 
 
 def update_cells(service, cell_updates):
@@ -442,14 +474,19 @@ def update_cells(service, cell_updates):
     ).execute()
 
 
-def append_rows(service, rows):
+def append_rows(service, rows, start_row):
+    """Writes rows starting at an EXACT row number, rather than relying on
+    Sheets' values().append to guess where the table ends (which is
+    unreliable on this sheet, since column A is blank in header rows 2-4
+    while column G isn't)."""
     if not rows:
         return
-    service.spreadsheets().values().append(
+    last_col = gid_column_letter()
+    end_row = start_row + len(rows) - 1
+    service.spreadsheets().values().update(
         spreadsheetId=config.SPREADSHEET_ID,
-        range=f"{config.SHEET_NAME}!A{config.HEADER_ROW}",
+        range=f"{config.SHEET_NAME}!A{start_row}:{last_col}{end_row}",
         valueInputOption="USER_ENTERED",
-        insertDataOption="INSERT_ROWS",
         body={"values": rows},
     ).execute()
 
@@ -555,7 +592,7 @@ def sync_tasks(tasks, service=None, run_sort=True):
         service = get_sheets_service()
 
     ensure_header_row(service)
-    existing = get_existing_rows(service)
+    existing, next_row = get_existing_rows(service)
 
     do_invoice_idx = config.SHEET_HEADERS.index("DO & Invoice received?")
     date_idx = config.SHEET_HEADERS.index("Date Added")
@@ -569,6 +606,9 @@ def sync_tasks(tasks, service=None, run_sort=True):
     unchanged = 0
 
     for task in tasks:
+        if not should_sync_task(task):
+            continue
+
         gid = task.get("gid")
         prior = existing.get(gid)
 
@@ -603,7 +643,7 @@ def sync_tasks(tasks, service=None, run_sort=True):
                 unchanged += 1
 
     if new_rows:
-        append_rows(service, new_rows)
+        append_rows(service, new_rows, next_row)
     if updates:
         update_cells(service, updates)
 
