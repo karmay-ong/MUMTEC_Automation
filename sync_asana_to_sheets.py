@@ -453,7 +453,8 @@ def get_existing_rows(service):
     existing = {}
     for i, row in enumerate(values):
         if row and row[-1]:
-            existing[row[-1]] = {"row_number": data_start + i, "values": row}
+            gid_key = str(row[-1])
+            existing[gid_key] = {"row_number": data_start + i, "values": row}
     next_row = data_start + len(values)
     return existing, next_row
 
@@ -474,6 +475,21 @@ def update_cells(service, cell_updates):
     ).execute()
 
 
+def _force_text(value):
+    """
+    Prefixes a value with an apostrophe so Sheets stores it as TEXT, never
+    a Number. Critical for the Task GID column: Asana task IDs are large
+    integers (16+ digits) that exceed Sheets' 15-16 significant-digit
+    precision for numbers. Without this, Sheets silently mangles the ID
+    the moment it's written, and the script can never recognize that task
+    as "already synced" again -- causing it to be re-appended every run.
+    """
+    if value in (None, ""):
+        return value
+    text = str(value)
+    return text if text.startswith("'") else f"'{text}"
+
+
 def append_rows(service, rows, start_row):
     """Writes rows starting at an EXACT row number, rather than relying on
     Sheets' values().append to guess where the table ends (which is
@@ -483,6 +499,7 @@ def append_rows(service, rows, start_row):
         return
     last_col = gid_column_letter()
     end_row = start_row + len(rows) - 1
+    rows = [row[:-1] + [_force_text(row[-1])] for row in rows]
     service.spreadsheets().values().update(
         spreadsheetId=config.SPREADSHEET_ID,
         range=f"{config.SHEET_NAME}!A{start_row}:{last_col}{end_row}",
@@ -565,6 +582,7 @@ def sort_sheet_by_date_added(service):
     for row in normalized:
         parsed = _parse_sheet_date(row[date_idx])
         row[date_idx] = parsed.strftime("%Y-%m-%d") if parsed else row[date_idx]
+        row[-1] = _force_text(row[-1])  # Task GID: keep as text, never a Number
 
     service.spreadsheets().values().update(
         spreadsheetId=config.SPREADSHEET_ID,

@@ -12,13 +12,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Asana ------------------------------------------------------------
-# Personal Access Token: Asana profile photo -> Settings -> Apps ->
-# "Manage Developer Apps" -> "Create new token"
+# Personal Access Token
 ASANA_ACCESS_TOKEN = os.environ.get("ASANA_TOKEN", "PASTE_YOUR_ASANA_TOKEN_HERE")
 
-# The project to watch for new financial requests, e.g. your
-# "MUMTEC Student Activities Request Form" project.
-# Find it in the project URL: https://app.asana.com/0/<PROJECT_GID>/list
+# Project ID
 ASANA_PROJECT_GID = os.environ.get("ASANA_PROJECT_ID", "PASTE_PROJECT_GID_HERE")
 
 # Set to True to check each new task for attachments (used to guess
