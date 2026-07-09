@@ -12,10 +12,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Asana ------------------------------------------------------------
-# Personal Access Token
+# Personal Access Token: Asana profile photo -> Settings -> Apps ->
+# "Manage Developer Apps" -> "Create new token"
 ASANA_ACCESS_TOKEN = os.environ.get("ASANA_TOKEN", "PASTE_YOUR_ASANA_TOKEN_HERE")
 
-# Project ID
+# The project to watch for new financial requests, e.g. your
+# "MUMTEC Student Activities Request Form" project.
+# Find it in the project URL: https://app.asana.com/0/<PROJECT_GID>/list
 ASANA_PROJECT_GID = os.environ.get("ASANA_PROJECT_ID", "PASTE_PROJECT_GID_HERE")
 
 # Set to True to check each new task for attachments (used to guess
@@ -92,16 +95,30 @@ AUTO_SORT_BY_DATE = True
 # row, set this to the row number where "Date Added, Expense Type, ..."
 # actually lives. E.g. if you have 4 custom rows above it, the real
 # header is row 5, so set HEADER_ROW = 5. Default (no preamble) is 1.
-HEADER_ROW = 5
+HEADER_ROW = 4
+
+# --- Invoice/DO reading (optional) --------------------------------------
+# Free Google Gemini API key from https://aistudio.google.com -- used to
+# actually read attached invoice/delivery order files and confirm what
+# they are, plus extract the invoice amount. Leave blank to disable this
+# feature entirely (falls back to the old "any attachment = Yes" check).
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.0-flash"
+
+# Only classify attachments on PR/PO tasks (same scope as the old
+# DO & Invoice check), and only for tasks not already confirmed as
+# having both an invoice and a DO -- once confirmed, skip re-checking
+# to save API quota.
+INVOICE_READING_ENABLED = bool(GEMINI_API_KEY)
 
 # --- Exclusions ---------------------------------------------------------
 # Tasks in any of these Asana sections (within your project) are skipped
 # entirely -- never synced, never counted. Matched case-insensitively.
-EXCLUDED_SECTIONS = ["2026", "MIND ENGINE"]
+EXCLUDED_SECTIONS = ["2026"]
 
 # Tasks whose Club/Team field matches any of these are also skipped
 # entirely. Matched case-insensitively.
-EXCLUDED_CLUBS = ["AI Challenge Cup"]
+EXCLUDED_CLUBS = ["AI Challenge Club"]
 
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from

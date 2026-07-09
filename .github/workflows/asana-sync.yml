@@ -36,4 +36,5 @@ jobs:
           ASANA_TOKEN: ${{ secrets.ASANA_TOKEN }}
           ASANA_PROJECT_ID: ${{ secrets.ASANA_PROJECT_ID }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python sync_asana_to_sheets.py
