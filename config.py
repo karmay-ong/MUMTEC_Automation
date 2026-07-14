@@ -116,7 +116,7 @@ SERVICE_ACCOUNT_FILE = os.environ.get("SERVICE_ACCOUNT_FILE", "service_account.j
 SPREADSHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "PASTE_SPREADSHEET_ID_HERE")
 
 # The tab name within the spreadsheet to write to.
-SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
+SHEET_NAME = os.environ.get("SHEET_NAME", "Claims & PR/PO")
 
 # --- Sheet columns (must match your sheet's header row exactly) ---------
 # Note: "Total (MYR)" is intentionally NOT in this list. It's fully
