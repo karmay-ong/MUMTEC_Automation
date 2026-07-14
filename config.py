@@ -69,7 +69,7 @@ DEFAULT_EXPENSE_TYPE_BUCKET = "Others"
 CLUB_COLUMNS = [
     "MUMTEC",
     "MUSA SOIT",
-    "GDGoC",
+    "GDG",
     "MBC",
     "MAC",
     "MCC",
@@ -95,21 +95,7 @@ AUTO_SORT_BY_DATE = True
 # row, set this to the row number where "Date Added, Expense Type, ..."
 # actually lives. E.g. if you have 4 custom rows above it, the real
 # header is row 5, so set HEADER_ROW = 5. Default (no preamble) is 1.
-HEADER_ROW = 4
-
-# --- Invoice/DO reading (optional) --------------------------------------
-# Free Google Gemini API key from https://aistudio.google.com -- used to
-# actually read attached invoice/delivery order files and confirm what
-# they are, plus extract the invoice amount. Leave blank to disable this
-# feature entirely (falls back to the old "any attachment = Yes" check).
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.0-flash"
-
-# Only classify attachments on PR/PO tasks (same scope as the old
-# DO & Invoice check), and only for tasks not already confirmed as
-# having both an invoice and a DO -- once confirmed, skip re-checking
-# to save API quota.
-INVOICE_READING_ENABLED = bool(GEMINI_API_KEY)
+HEADER_ROW = 1
 
 # --- Exclusions ---------------------------------------------------------
 # Tasks in any of these Asana sections (within your project) are skipped
@@ -118,7 +104,7 @@ EXCLUDED_SECTIONS = ["2026"]
 
 # Tasks whose Club/Team field matches any of these are also skipped
 # entirely. Matched case-insensitively.
-EXCLUDED_CLUBS = ["AI Challenge Club"]
+EXCLUDED_CLUBS = ["AI Challenge Cup"]
 
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from
@@ -133,23 +119,28 @@ SPREADSHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "PASTE_SPREADSHEET_ID_HERE")
 SHEET_NAME = os.environ.get("SHEET_NAME", "Sheet1")
 
 # --- Sheet columns (must match your sheet's header row exactly) ---------
+# Note: "Total (MYR)" is intentionally NOT in this list. It's fully
+# self-managed by you in the sheet (e.g. a SUM formula across the club
+# columns) -- the script never reads or writes it. Just make sure that
+# column physically no longer sits between the last club column and the
+# hidden Task GID column (delete it, don't just clear it), or every
+# column after it will be misaligned.
 SHEET_HEADERS = (
     [
         "Date Added",
         "Expense Type",
         "PRPO/SAP Submission No.",
         "Submission Status",
-        "DO & Invoice received?",
         "Claimant/Payee",
         "Details of Purchase",
     ]
-    + [f"Amounts for {club}" for club in CLUB_COLUMNS]
-    + ["Total (MYR)"]
+    + [f"{club}" for club in CLUB_COLUMNS]
 )
 
-# The script adds ONE extra column after "Total (MYR)" called "Task GID".
-# It's used internally to detect which tasks are already logged, so new
-# runs never create duplicate rows. Feel free to hide that column in
+# The script adds ONE extra column after the last club column, called
+# "Task GID". It's used internally to detect which tasks are already
+# logged, so new runs never create duplicate rows. Feel free to hide
+# that column in
 # Google Sheets (right-click the column -> Hide column) -- just don't
 # delete it or its values.
 

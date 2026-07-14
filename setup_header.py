@@ -3,10 +3,16 @@
 One-time setup script: builds the exact 4-row header block your sheet
 needs, matching config.HEADER_ROW = 4:
 
-    Row 1: Date Added | Expense Type | ... | Details of Purchase | [merged: Amounts] | Total (MYR)
-    Row 2: (blank)     ...                 | Clubs               | MUMTEC | MUSA SOIT | ... | (blank)
+    Row 1: Date Added | Expense Type | ... | Details of Purchase | [merged: Amounts]
+    Row 2: (blank)     ...                 | Clubs               | MUMTEC | MUSA SOIT | ...
     Row 3: (blank)     ...                 | Total budget         | (fill in your own budgets)
     Row 4: (blank)     ...                 | Balance              | (fill in your own formulas)
+
+Note: "Total (MYR)" is NOT written by this script -- that column is
+entirely yours to define (e.g. your own SUM formula). Put it somewhere
+OUTSIDE the columns this script manages (e.g. to the right of the hidden
+Task GID column), not between the last club column and Task GID, or it
+will misalign every column after it.
 
 Run this ONCE. It's safe to re-run (it just rewrites the same header
 text/merge), but it will NOT touch anything in row 5+ -- your actual
@@ -39,7 +45,6 @@ def main():
 
     headers = config.SHEET_HEADERS
     details_col = sync.header_col_letter("Details of Purchase")
-    total_col = sync.header_col_letter("Total (MYR)")
     first_club_col = sync.header_col_letter(f"Amounts for {config.CLUB_COLUMNS[0]}")
     last_club_col = sync.header_col_letter(f"Amounts for {config.CLUB_COLUMNS[-1]}")
 
@@ -103,10 +108,15 @@ def main():
 
     print()
     print("Done! Your header now matches:")
-    print(f"  Row 1: ... | Details of Purchase | Amounts (merged {first_club_col}1:{last_club_col}1) | Total (MYR)")
+    print(f"  Row 1: ... | Details of Purchase | Amounts (merged {first_club_col}1:{last_club_col}1)")
     print(f"  Row 2: ... | Clubs                | {' | '.join(config.CLUB_COLUMNS)}")
     print("  Row 3: ... | Total budget          | (fill in your own budgets)")
     print("  Row 4: ... | Balance               | (fill in your own formulas)")
+    print()
+    print("NOTE: 'Total (MYR)' is entirely yours to add -- put it OUTSIDE")
+    print("the columns this script manages (e.g. to the right of the hidden")
+    print("Task GID column), not immediately after the last club column,")
+    print("or every column after it will be misaligned.")
     print()
     print("Now go fill in Total budget (row 3) and Balance (row 4) yourself,")
     print("then run sync_asana_to_sheets.py as normal.")

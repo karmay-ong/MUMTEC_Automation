@@ -15,8 +15,9 @@ What it does:
      an invoice got attached). Untouched rows are left alone.
   6. Re-sorts the sheet by "Date Added" (oldest first) when done.
 
-Every row is tracked via a hidden "Task GID" column added after
-"Total (MYR)" -- don't delete or edit that column.
+Every row is tracked via a hidden "Task GID" column added after the last
+club amount column -- don't delete or edit that column. "Total (MYR)" is
+NOT managed by this script; that column is entirely yours to define.
 
 For "automatic" syncing, run this on a schedule (every few minutes) via
 cron / Task Scheduler / any host -- see README.md. That gives near
@@ -36,7 +37,6 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 import config
-import invoice_reader
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@ def match_club_column(club_value):
     return None
 
 
-def task_to_row(task, attachment_count=None, doc_analysis=None):
+def task_to_row(task):
     fields = custom_field_map(task)
     desc = parse_description(task.get("notes", ""))
 
@@ -327,32 +327,11 @@ def task_to_row(task, attachment_count=None, doc_analysis=None):
     status = determine_status(expense_type, pr_number, po_number, znp_number, task_progress)
     claimant = determine_claimant(expense_type, desc)
 
-    if expense_type != "PR/PO":
-        do_invoice = "N/A"
-    elif doc_analysis is not None:
-        has_inv, has_do = doc_analysis["has_invoice"], doc_analysis["has_delivery_order"]
-        if has_inv and has_do:
-            do_invoice = "Yes"
-        elif has_inv:
-            do_invoice = "Invoice only"
-        elif has_do:
-            do_invoice = "DO only"
-        else:
-            do_invoice = "No"
-    elif config.CHECK_ATTACHMENTS and attachment_count is not None:
-        do_invoice = "Yes" if attachment_count > 0 else "No"
-    else:
-        do_invoice = ""  # left blank for manual entry
-
     display_name = strip_task_name_prefix(task.get("name", ""))
     url = task.get("permalink_url", "")
     details_of_purchase = f'=HYPERLINK("{url}", "{sheets_escape(display_name)}")' if url else display_name
 
     amount = parse_amount(desc.get("Total Requested Amount", ""))
-    if doc_analysis is not None and doc_analysis.get("invoice_amount") is not None:
-        # The actual invoice is the source of truth once we've read it --
-        # overrides whatever was originally requested in the form.
-        amount = doc_analysis["invoice_amount"]
 
     club_raw = fields.get(config.FIELD_CLUB, "") or desc.get("Club/Team", "")
     matched_club = match_club_column(club_raw)
@@ -370,14 +349,12 @@ def task_to_row(task, attachment_count=None, doc_analysis=None):
         "Expense Type": expense_type,
         "PRPO/SAP Submission No.": submission_no,
         "Submission Status": status,
-        "DO & Invoice received?": do_invoice,
         "Claimant/Payee": claimant,
         "Details of Purchase": details_of_purchase,
-        "Total (MYR)": amount if amount is not None else "",
     }
     for club in config.CLUB_COLUMNS:
-        col_name = f"Amounts for {club}"
-        row[col_name] = amount if (amount is not None and club == matched_club) else ""
+        col_name = f"{club}"
+        row[col_name] = amount if (amount is not None and club == matched_club and status != "Cancelled") else ""
 
     values = [row.get(header, "") for header in config.SHEET_HEADERS]
     values.append(task.get("gid", ""))  # hidden tracking column at the end
@@ -628,7 +605,6 @@ def sync_tasks(tasks, service=None, run_sort=True):
     ensure_header_row(service)
     existing, next_row = get_existing_rows(service)
 
-    do_invoice_idx = config.SHEET_HEADERS.index("DO & Invoice received?")
     date_idx = config.SHEET_HEADERS.index("Date Added")
     num_cols = len(config.SHEET_HEADERS) + 1
     # Every column is live-synced except Date Added (set once at creation
@@ -649,35 +625,8 @@ def sync_tasks(tasks, service=None, run_sort=True):
         fields = custom_field_map(task)
         expense_type = determine_expense_type(fields.get(config.FIELD_NATURE_OF_REQUEST, ""))
 
-        attachment_count = None
-        doc_analysis = None
-        if expense_type == "PR/PO":
-            prior_do_invoice = prior["values"][do_invoice_idx] if prior and len(prior["values"]) > do_invoice_idx else None
-            already_confirmed = prior_do_invoice == "Yes"
 
-            if already_confirmed:
-                # Don't re-spend API calls re-checking a task that's
-                # already confirmed -- but DO reuse its previously-read
-                # amount, so we don't recompute a blank/stale value that
-                # the diff logic would then "helpfully" overwrite back to.
-                total_idx = config.SHEET_HEADERS.index("Total (MYR)")
-                prior_total = prior["values"][total_idx] if prior and len(prior["values"]) > total_idx else None
-                try:
-                    prior_total = float(prior_total) if prior_total not in (None, "") else None
-                except (TypeError, ValueError):
-                    prior_total = None
-                doc_analysis = {"has_invoice": True, "has_delivery_order": True, "invoice_amount": prior_total}
-            elif config.INVOICE_READING_ENABLED:
-                doc_analysis = invoice_reader.analyze_task_documents(gid)
-            elif config.CHECK_ATTACHMENTS:
-                # Fallback: no Gemini key configured, just check if any
-                # file is attached at all.
-                try:
-                    attachment_count = fetch_attachment_count(gid)
-                except requests.HTTPError:
-                    attachment_count = None
-
-        row = task_to_row(task, attachment_count, doc_analysis)
+        row = task_to_row(task)
 
         if prior is None:
             new_rows.append(row)
