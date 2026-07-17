@@ -16,8 +16,9 @@ What it does:
   6. Re-sorts the sheet by "Date Added" (oldest first) when done.
 
 Every row is tracked via a hidden "Task GID" column added after the last
-club amount column -- don't delete or edit that column. "Total (MYR)" is
-NOT managed by this script; that column is entirely yours to define.
+club amount column -- don't delete or edit that column. "Total (MYR)" IS
+managed by this script -- it's computed from the amount(s) actually
+attributed to clubs for that row (see the multi-club split note below).
 
 For "automatic" syncing, run this on a schedule (every few minutes) via
 cron / Task Scheduler / any host -- see README.md. That gives near
@@ -204,6 +205,41 @@ def parse_amount(text):
         return None
 
 
+_CLUB_SPLIT_LINE_RE = re.compile(r"^(?:RM|MYR)?\s*([\d,]+(?:\.\d+)?)\s*\(([^)]+)\)$", re.IGNORECASE)
+
+
+def parse_club_amount_splits(notes):
+    """
+    Scans the ENTIRE task description (not just under one label) for
+    lines of the form "480 (MUMTEC)" -- an amount attributed to a
+    specific club. Used for two cases the club described:
+
+      1. A request split across multiple clubs:
+             480 (MUMTEC)
+             300 (GDG)
+      2. A request where Club/Team is set to one club (e.g. MAC) but the
+         cost is actually borne by another club named in the description:
+             800 (MUMTEC)
+         (this is just the same pattern with a single line)
+
+    Returns a list of (club_name_as_written, amount) tuples, in the order
+    they appear. Empty list if no such lines exist -- caller should then
+    fall back to the plain "Total Requested Amount" + Club/Team field.
+    """
+    splits = []
+    for raw_line in (notes or "").replace("\r\n", "\n").split("\n"):
+        line = raw_line.strip().replace("\xa0", "")
+        if not line:
+            continue
+        match = _CLUB_SPLIT_LINE_RE.match(line)
+        if match:
+            amount = parse_amount(match.group(1))
+            club_name = match.group(2).strip()
+            if amount is not None and club_name:
+                splits.append((club_name, amount))
+    return splits
+
+
 def strip_task_name_prefix(name):
     """
     '[2026, MUMTEC x MUMEC] SLN Bootcamp- Food 2' -> 'SLN Bootcamp- Food 2'
@@ -331,11 +367,6 @@ def task_to_row(task):
     url = task.get("permalink_url", "")
     details_of_purchase = f'=HYPERLINK("{url}", "{sheets_escape(display_name)}")' if url else display_name
 
-    amount = parse_amount(desc.get("Total Requested Amount", ""))
-
-    club_raw = fields.get(config.FIELD_CLUB, "") or desc.get("Club/Team", "")
-    matched_club = match_club_column(club_raw)
-
     created_at = task.get("created_at", "")
     date_added = ""
     if created_at:
@@ -343,6 +374,8 @@ def task_to_row(task):
             date_added = datetime.fromisoformat(created_at.replace("Z", "+00:00")).strftime("%Y-%m-%d")
         except ValueError:
             date_added = created_at
+
+    amount_is_live = status != "Cancelled"
 
     row = {
         "Date Added": date_added,
@@ -352,9 +385,40 @@ def task_to_row(task):
         "Claimant/Payee": claimant,
         "Details of Purchase": details_of_purchase,
     }
+
+    # --- Amount attribution ------------------------------------------
+    # If the description contains "<amount> (<CLUB>)" lines, those are
+    # authoritative and OVERRIDE the Club/Team field entirely for money
+    # placement -- covers both a request split across multiple clubs,
+    # and a request where the cost is borne by a club other than the one
+    # selected in Club/Team. Otherwise, fall back to the plain single
+    # "Total Requested Amount" + Club/Team field.
+    splits = parse_club_amount_splits(task.get("notes", ""))
+
+    club_amounts = {}  # matched sheet column name -> summed amount
+    total = None
+
+    if splits:
+        total = 0.0
+        for club_raw, amt in splits:
+            total += amt
+            matched = match_club_column(club_raw)
+            if matched:
+                club_amounts[matched] = club_amounts.get(matched, 0.0) + amt
+    else:
+        amount = parse_amount(desc.get("Total Requested Amount", ""))
+        if amount is not None:
+            total = amount
+            club_raw = fields.get(config.FIELD_CLUB, "") or desc.get("Club/Team", "")
+            matched = match_club_column(club_raw)
+            if matched:
+                club_amounts[matched] = amount
+
     for club in config.CLUB_COLUMNS:
-        col_name = f"{club}"
-        row[col_name] = amount if (amount is not None and club == matched_club and status != "Cancelled") else ""
+        val = club_amounts.get(club)
+        row[club] = val if (amount_is_live and val) else ""
+
+    row["Total (MYR)"] = total if (amount_is_live and total is not None) else ""
 
     values = [row.get(header, "") for header in config.SHEET_HEADERS]
     values.append(task.get("gid", ""))  # hidden tracking column at the end
@@ -621,10 +685,6 @@ def sync_tasks(tasks, service=None, run_sort=True):
 
         gid = task.get("gid")
         prior = existing.get(gid)
-
-        fields = custom_field_map(task)
-        expense_type = determine_expense_type(fields.get(config.FIELD_NATURE_OF_REQUEST, ""))
-
 
         row = task_to_row(task)
 

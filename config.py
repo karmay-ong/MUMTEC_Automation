@@ -119,12 +119,9 @@ SPREADSHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "PASTE_SPREADSHEET_ID_HERE")
 SHEET_NAME = os.environ.get("SHEET_NAME", "Claims & PR/PO")
 
 # --- Sheet columns (must match your sheet's header row exactly) ---------
-# Note: "Total (MYR)" is intentionally NOT in this list. It's fully
-# self-managed by you in the sheet (e.g. a SUM formula across the club
-# columns) -- the script never reads or writes it. Just make sure that
-# column physically no longer sits between the last club column and the
-# hidden Task GID column (delete it, don't just clear it), or every
-# column after it will be misaligned.
+# "Total (MYR)" IS managed by this script -- it's an automatically
+# computed sum (see task_to_row in sync_asana_to_sheets.py), not
+# something you type in yourself.
 SHEET_HEADERS = (
     [
         "Date Added",
@@ -135,6 +132,7 @@ SHEET_HEADERS = (
         "Details of Purchase",
     ]
     + [f"{club}" for club in CLUB_COLUMNS]
+    + ["Total (MYR)"]
 )
 
 # The script adds ONE extra column after the last club column, called
