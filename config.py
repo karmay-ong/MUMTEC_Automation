@@ -106,6 +106,11 @@ EXCLUDED_SECTIONS = ["2026"]
 # entirely. Matched case-insensitively.
 EXCLUDED_CLUBS = ["AI Challenge Cup"]
 
+# Tasks whose NAME contains any of these words/phrases are also skipped
+# entirely. Matched case-insensitively, as a substring (so "SLN" also
+# excludes "SLN Bootcamp", "2026 SLN", etc).
+EXCLUDED_TITLE_KEYWORDS = ["SLN"]
+
 # --- Google Sheets ------------------------------------------------------
 # Path to the service account JSON key file you downloaded from
 # Google Cloud Console.

@@ -115,8 +115,8 @@ def task_section_names(task):
 
 
 def should_sync_task(task):
-    """False if this task should be skipped entirely -- excluded section
-    or excluded club -- per config.EXCLUDED_SECTIONS / EXCLUDED_CLUBS."""
+    """False if this task should be skipped entirely -- excluded section,
+    excluded club, or excluded title keyword -- per config.EXCLUDED_*."""
     section_names = {s.strip().lower() for s in task_section_names(task)}
     if section_names & {s.strip().lower() for s in config.EXCLUDED_SECTIONS}:
         return False
@@ -124,6 +124,10 @@ def should_sync_task(task):
     fields = custom_field_map(task)
     club = (fields.get(config.FIELD_CLUB, "") or "").strip().lower()
     if club in {c.strip().lower() for c in config.EXCLUDED_CLUBS}:
+        return False
+
+    name = (task.get("name", "") or "").lower()
+    if any(keyword.strip().lower() in name for keyword in config.EXCLUDED_TITLE_KEYWORDS):
         return False
 
     return True
