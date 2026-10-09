@@ -6,3 +6,5 @@ sync.log
 venv/
 .venv/
 env/
+config.py
+ReadMe.md
