@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
 """
-One-time setup script: builds the exact 4-row header block your sheet
-needs, matching config.HEADER_ROW = 4:
-
-    Row 1: Date Added | Expense Type | ... | Details of Purchase | [merged: Amounts]
-    Row 2: (blank)     ...                 | Clubs               | MUMTEC | MUSA SOIT | ...
-    Row 3: (blank)     ...                 | Total budget         | (fill in your own budgets)
-    Row 4: (blank)     ...                 | Balance              | (fill in your own formulas)
-
-Note: "Total (MYR)" is NOT written by this script -- that column is
-entirely yours to define (e.g. your own SUM formula). Put it somewhere
-OUTSIDE the columns this script manages (e.g. to the right of the hidden
-Task GID column), not between the last club column and Task GID, or it
-will misalign every column after it.
-
 Run this ONCE. It's safe to re-run (it just rewrites the same header
 text/merge), but it will NOT touch anything in row 5+ -- your actual
 request data is never touched by this script.
